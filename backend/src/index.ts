@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import youtubedl from 'youtube-dl-exec';
-import { unlinkSync, readFileSync } from 'fs';
+import { unlinkSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { pipeline } from '@xenova/transformers';
 // @ts-ignore
@@ -9,6 +9,12 @@ import { WaveFile } from 'wavefile';
 
 const app = express();
 const PORT = 3001;
+const TRANSCRIPTIONS_DIR = join(process.cwd(), 'transcriptions');
+
+// Crear carpeta de transcripciones si no existe
+if (!existsSync(TRANSCRIPTIONS_DIR)) {
+  mkdirSync(TRANSCRIPTIONS_DIR, { recursive: true });
+}
 
 app.use(cors());
 app.use(express.json());
@@ -19,7 +25,7 @@ let transcriber: any = null;
 async function getTranscriber() {
   if (!transcriber) {
     console.log('🔵 Cargando modelo Whisper...');
-    transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny');
+    transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-small');
     console.log('✅ Modelo Whisper cargado');
   }
   return transcriber;
@@ -98,10 +104,33 @@ app.post('/api/transcribe', async (req: Request, res: Response) => {
       console.error('Error al eliminar archivo temporal:', err);
     }
 
+    // Guardar transcripción en archivos
+    const filename = `transcription-${timestamp}`;
+    const txtPath = join(TRANSCRIPTIONS_DIR, `${filename}.txt`);
+    const jsonPath = join(TRANSCRIPTIONS_DIR, `${filename}.json`);
+
+    // Guardar como .txt
+    writeFileSync(txtPath, result.text, 'utf-8');
+    console.log(`💾 Guardado: ${txtPath}`);
+
+    // Guardar como .json
+    const jsonData = {
+      url,
+      timestamp: new Date().toISOString(),
+      text: result.text,
+      length: result.text?.length || 0
+    };
+    writeFileSync(jsonPath, JSON.stringify(jsonData, null, 2), 'utf-8');
+    console.log(`💾 Guardado: ${jsonPath}`);
+
     // Retornar el texto transcrito
     res.json({
       text: result.text,
-      success: true
+      success: true,
+      files: {
+        txt: txtPath,
+        json: jsonPath
+      }
     });
 
   } catch (error) {
