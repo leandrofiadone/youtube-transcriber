@@ -46,8 +46,10 @@ cd frontend
 2. Abre el frontend en tu navegador
 3. Pega la URL de un video de YouTube
 4. Haz clic en "Transcribir Video"
-5. Espera a que se descargue el audio y se transcriba
+5. Espera a que el backend descargue el audio y lo transcriba (puede tardar varios minutos)
 6. La transcripción aparecerá en pantalla
+
+**Nota:** La transcripción se realiza completamente en el servidor, no en el navegador.
 
 ## 🛠️ Scripts Disponibles
 
@@ -76,21 +78,23 @@ youtube-transcriber/
 ### Backend
 - **Express**: Servidor web
 - **TypeScript**: Tipado estático
-- **ytdl-core**: Descarga de audio de YouTube
+- **youtube-dl-exec**: Descarga de audio de YouTube (usa yt-dlp)
+- **@xenova/transformers**: Transcripción de audio con Whisper
+- **Whisper Tiny**: Modelo de ML para transcripción (corre en Node.js)
 - **CORS**: Habilitación de peticiones cross-origin
 
 ### Frontend
 - **HTML5**: Estructura
-- **JavaScript Vanilla**: Lógica
-- **@xenova/transformers**: Transcripción de audio en el navegador
-- **Whisper Tiny**: Modelo de ML para transcripción
+- **CSS3**: Estilos
+- **JavaScript Vanilla**: Lógica simple para llamar al backend
 
 ## ⚠️ Notas Importantes
 
-- La primera vez que uses la aplicación, el modelo de transcripción se descargará automáticamente (puede tardar unos minutos)
+- La primera vez que inicies el backend, el modelo Whisper se descargará automáticamente (puede tardar unos minutos)
 - El modelo Whisper Tiny es pequeño y rápido, pero puede no ser tan preciso como versiones más grandes
 - Algunos videos de YouTube pueden no estar disponibles para descarga
-- La transcripción se realiza completamente en tu navegador
+- La transcripción se realiza completamente en el servidor (backend)
+- Videos más largos tardarán más en transcribirse (aproximadamente 1-2 minutos por cada minuto de audio)
 
 ## 🐛 Solución de Problemas
 
@@ -103,9 +107,9 @@ youtube-transcriber/
 - Algunos videos pueden tener restricciones de descarga
 
 **La transcripción es lenta:**
-- Es normal la primera vez (descarga del modelo)
+- Es normal la primera vez (descarga del modelo en el servidor)
 - Videos más largos tardan más en transcribirse
-- Puedes usar un modelo más grande para mejor precisión (edita el código frontend)
+- Puedes usar un modelo más grande para mejor precisión (edita el código backend, línea 20: cambia 'Xenova/whisper-tiny' por 'Xenova/whisper-small' o 'Xenova/whisper-base')
 
 ## 📝 Licencia
 
