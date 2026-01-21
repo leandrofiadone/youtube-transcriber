@@ -1,0 +1,100 @@
+.app {
+  @apply min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white;
+}
+
+.container {
+  @apply mx-auto px-4 py-16 max-w-4xl;
+}
+
+.header {
+  @apply text-center mb-12;
+
+  .title {
+    @apply text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-600;
+  }
+
+  .subtitle {
+    @apply text-gray-400 text-lg;
+  }
+}
+
+.card {
+  @apply bg-gray-800 rounded-lg shadow-2xl p-8 mb-8;
+
+  .form-group {
+    @apply mb-6;
+
+    .label {
+      @apply block text-sm font-medium text-gray-300 mb-2;
+    }
+
+    .input {
+      @apply w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white;
+      @apply focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition;
+      @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    }
+  }
+
+  .button {
+    @apply w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold py-3 px-6 rounded-lg;
+    @apply hover:from-blue-600 hover:to-purple-700 transition transform hover:scale-105;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none;
+  }
+
+  .stages-container {
+    @apply mt-6 space-y-4;
+
+    .stage-item {
+      @apply flex items-center gap-3 text-gray-300;
+
+      .stage-icon {
+        @apply w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg;
+        @apply transition-all duration-300;
+
+        &.completed {
+          @apply bg-green-500 text-white;
+        }
+
+        &.pending {
+          @apply bg-gray-700 text-gray-500;
+        }
+      }
+
+      .stage-label {
+        @apply font-medium flex-1;
+      }
+
+      .stage-detail {
+        @apply text-sm text-blue-400 font-mono;
+      }
+    }
+
+    .current-stage {
+      @apply mt-4 pt-4 border-t border-gray-700;
+
+      .stage-current-label {
+        @apply text-sm text-gray-400 italic;
+      }
+    }
+  }
+}
+
+.result-card {
+  @apply bg-gray-800 rounded-lg shadow-2xl p-8;
+
+  .result-header {
+    @apply flex justify-between items-center mb-4;
+
+    .result-title {
+      @apply text-2xl font-bold;
+    }
+
+    .copy-button {
+      @apply bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition;
+    }
+  }
+
+  .result-text {
+    @apply bg-gray-700 rounded-lg p-6 text-gray-200 leading-relaxed max-h-96 overflow-y-auto;
+  }
+}
