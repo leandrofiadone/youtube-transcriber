@@ -21,3 +21,14 @@ Thumbs.db
 # Temporary files
 *.tmp
 audio-*.mp3
+audio-*.wav
+audio-*.pcm
+
+# Transcriptions
+backend/transcriptions/
+
+# Claude
+.claude/
+
+# Documentation (optional - remove if you want to track it)
+COMO_FUNCIONA.md
