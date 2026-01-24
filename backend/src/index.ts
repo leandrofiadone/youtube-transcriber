@@ -109,53 +109,127 @@ app.get('/api/transcribe-stream', async (req: Request, res: Response) => {
       return;
     }
 
-    sendProgress('process', 37, 'Cargando audio procesado...');
-    console.log(`🔵 Cargando audio procesado...`);
+    sendProgress('process', 37, 'Analizando duracion del audio...');
+    console.log(`🔵 Analizando audio...`);
 
-    // Leer el archivo PCM (es mucho más eficiente que WAV)
-    const pcmBuffer = readFileSync(pcmPath);
-    const float32Audio = new Float32Array(pcmBuffer.buffer, pcmBuffer.byteOffset, pcmBuffer.length / 4);
-    const audioDuration = float32Audio.length / 16000;
+    // Obtener duración del audio sin cargarlo todo en memoria
+    const statsPcm = statSync(pcmPath);
+    const audioDuration = (statsPcm.size / 4) / 16000; // 4 bytes por float, 16000 Hz
+    console.log(`📊 Audio: ${Math.round(audioDuration)}s (${(audioDuration / 60).toFixed(1)} minutos)`);
 
-    // Limpiar archivo PCM temporal
-    try {
-      unlinkSync(pcmPath);
-    } catch (err) {
-      console.error('Error al eliminar PCM temporal:', err);
-    }
+    const MAX_DURATION_SECONDS = 3600; // 1 hora
+    let fullTranscription = '';
 
-    sendProgress('process', 40, `Audio listo (${Math.round(audioDuration)}s de duracion)`);
+    if (audioDuration > MAX_DURATION_SECONDS) {
+      // Audio largo - dividir y procesar por segmentos
+      const SEGMENT_DURATION = 1800; // 30 minutos por segmento
+      const totalSegments = Math.ceil(audioDuration / SEGMENT_DURATION);
 
-    // Paso 3: Cargando modelo (40-50%)
-    sendProgress('model', 45, 'Preparando modelo de transcripcion...');
-    const model = await getTranscriber((msg) => sendProgress('model', 47, msg));
-    sendProgress('model', 50, 'Modelo listo');
+      sendProgress('process', 40, `Audio largo detectado (${Math.round(audioDuration / 60)}min). Dividiendo en ${totalSegments} segmentos...`);
+      console.log(`⚠️ Audio largo: ${Math.round(audioDuration)}s. Procesando en ${totalSegments} segmentos de ${SEGMENT_DURATION}s`);
 
-    // Paso 4: Transcribiendo (50-90%)
-    const totalChunks = Math.ceil(audioDuration / 20);
-    sendProgress('transcribe', 55, 'Iniciando transcripcion...');
-    console.log(`🔵 Transcribiendo audio...`);
-    console.log(`📊 Audio: ${Math.round(audioDuration)}s (${totalChunks} chunks)`);
+      // Paso 3: Cargando modelo (40-50%)
+      sendProgress('model', 45, 'Preparando modelo de transcripcion...');
+      const model = await getTranscriber((msg) => sendProgress('model', 47, msg));
+      sendProgress('model', 50, 'Modelo listo');
 
-    let chunksProcessed = 0;
-    const result = await model(float32Audio, {
-      chunk_length_s: 30,
-      stride_length_s: 5,
-      return_timestamps: false,
-      task: 'transcribe',
-      sampling_rate: 16000,
-      chunk_callback: (_chunk: any) => {
-        chunksProcessed++;
-        const chunkPercent = Math.round((chunksProcessed / totalChunks) * 100);
-        const overallProgress = 55 + Math.round((chunkPercent / 100) * 35); // 55% a 90%
-        console.log(`⏳ Transcribiendo: ${chunkPercent}% (chunk ${chunksProcessed}/${totalChunks})`);
-        sendProgress('transcribe', overallProgress, `Transcribiendo: chunk ${chunksProcessed}/${totalChunks}`);
+      // Procesar cada segmento
+      for (let i = 0; i < totalSegments; i++) {
+        const startSample = i * SEGMENT_DURATION * 16000;
+        const endSample = Math.min((i + 1) * SEGMENT_DURATION * 16000, audioDuration * 16000);
+        const segmentDuration = (endSample - startSample) / 16000;
+
+        sendProgress('transcribe', 50 + Math.round((i / totalSegments) * 40), `Procesando segmento ${i + 1}/${totalSegments}...`);
+        console.log(`🔵 Segmento ${i + 1}/${totalSegments}: ${Math.round(segmentDuration)}s`);
+
+        // Extraer segmento del PCM
+        const segmentPcmPath = join(process.cwd(), `segment-${timestamp}-${i}.pcm`);
+        execSync(`ffmpeg -f f32le -ar 16000 -ac 1 -i "${pcmPath}" -ss ${i * SEGMENT_DURATION} -t ${SEGMENT_DURATION} -f f32le "${segmentPcmPath}" -y`, {
+          stdio: 'pipe'
+        });
+
+        // Cargar y transcribir segmento
+        const segmentBuffer = readFileSync(segmentPcmPath);
+        const segmentAudio = new Float32Array(segmentBuffer.buffer, segmentBuffer.byteOffset, segmentBuffer.length / 4);
+
+        const segmentResult = await model(segmentAudio, {
+          chunk_length_s: 30,
+          stride_length_s: 5,
+          return_timestamps: false,
+          task: 'transcribe',
+          sampling_rate: 16000
+        });
+
+        fullTranscription += segmentResult.text + ' ';
+
+        // Limpiar segmento temporal
+        try {
+          unlinkSync(segmentPcmPath);
+        } catch (err) {
+          console.error('Error al eliminar segmento:', err);
+        }
+
+        console.log(`✅ Segmento ${i + 1}/${totalSegments} completado`);
       }
-    });
 
-    sendProgress('transcribe', 90, 'Transcripcion completa');
+      // Limpiar archivo PCM temporal
+      try {
+        unlinkSync(pcmPath);
+      } catch (err) {
+        console.error('Error al eliminar PCM temporal:', err);
+      }
+
+      sendProgress('transcribe', 90, 'Transcripcion completa');
+
+    } else {
+      // Audio normal - procesar de una vez
+      sendProgress('process', 37, 'Cargando audio procesado...');
+      console.log(`🔵 Cargando audio procesado...`);
+
+      const pcmBuffer = readFileSync(pcmPath);
+      const float32Audio = new Float32Array(pcmBuffer.buffer, pcmBuffer.byteOffset, pcmBuffer.length / 4);
+
+      // Limpiar archivo PCM temporal
+      try {
+        unlinkSync(pcmPath);
+      } catch (err) {
+        console.error('Error al eliminar PCM temporal:', err);
+      }
+
+      sendProgress('process', 40, `Audio listo (${Math.round(audioDuration)}s de duracion)`);
+
+      // Paso 3: Cargando modelo (40-50%)
+      sendProgress('model', 45, 'Preparando modelo de transcripcion...');
+      const model = await getTranscriber((msg) => sendProgress('model', 47, msg));
+      sendProgress('model', 50, 'Modelo listo');
+
+      // Paso 4: Transcribiendo (50-90%)
+      const totalChunks = Math.ceil(audioDuration / 20);
+      sendProgress('transcribe', 55, 'Iniciando transcripcion...');
+      console.log(`🔵 Transcribiendo audio...`);
+      console.log(`📊 Audio: ${Math.round(audioDuration)}s (${totalChunks} chunks)`);
+
+      let chunksProcessed = 0;
+      const result = await model(float32Audio, {
+        chunk_length_s: 30,
+        stride_length_s: 5,
+        return_timestamps: false,
+        task: 'transcribe',
+        sampling_rate: 16000,
+        chunk_callback: (_chunk: any) => {
+          chunksProcessed++;
+          const chunkPercent = Math.round((chunksProcessed / totalChunks) * 100);
+          const overallProgress = 55 + Math.round((chunkPercent / 100) * 35); // 55% a 90%
+          console.log(`⏳ Transcribiendo: ${chunkPercent}% (chunk ${chunksProcessed}/${totalChunks})`);
+          sendProgress('transcribe', overallProgress, `Transcribiendo: chunk ${chunksProcessed}/${totalChunks}`);
+        }
+      });
+
+      fullTranscription = result.text;
+      sendProgress('transcribe', 90, 'Transcripcion completa');
+    }
     console.log(`✅ Transcripción completa`);
-    console.log(`📏 Longitud del texto: ${result.text?.length || 0} caracteres`);
+    console.log(`📏 Longitud del texto: ${fullTranscription.length} caracteres`);
 
     // Paso 5: Guardando archivos (90-100%)
     sendProgress('save', 92, 'Guardando archivos...');
@@ -171,14 +245,14 @@ app.get('/api/transcribe-stream', async (req: Request, res: Response) => {
     const txtPath = join(TRANSCRIPTIONS_DIR, `${filename}.txt`);
     const jsonPath = join(TRANSCRIPTIONS_DIR, `${filename}.json`);
 
-    writeFileSync(txtPath, result.text, 'utf-8');
+    writeFileSync(txtPath, fullTranscription, 'utf-8');
     console.log(`💾 Guardado: ${txtPath}`);
 
     const jsonData = {
       url,
       timestamp: new Date().toISOString(),
-      text: result.text,
-      length: result.text?.length || 0
+      text: fullTranscription,
+      length: fullTranscription.length
     };
     writeFileSync(jsonPath, JSON.stringify(jsonData, null, 2), 'utf-8');
     console.log(`💾 Guardado: ${jsonPath}`);
@@ -187,7 +261,7 @@ app.get('/api/transcribe-stream', async (req: Request, res: Response) => {
 
     sendComplete({
       message: 'Transcripcion completada',
-      text: result.text,
+      text: fullTranscription,
       files: { txt: txtPath, json: jsonPath }
     });
 
@@ -254,41 +328,95 @@ app.post('/api/transcribe', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Error al procesar el audio con ffmpeg' });
     }
 
-    console.log(`🔵 Cargando audio procesado...`);
-    // Leer el archivo PCM (es mucho más eficiente que WAV)
-    const pcmBuffer = readFileSync(pcmPath);
-    const float32Audio = new Float32Array(pcmBuffer.buffer, pcmBuffer.byteOffset, pcmBuffer.length / 4);
-    const audioDuration = float32Audio.length / 16000;
+    console.log(`🔵 Analizando audio...`);
+    // Obtener duración sin cargar todo en memoria
+    const statsPcm = statSync(pcmPath);
+    const audioDuration = (statsPcm.size / 4) / 16000;
+    console.log(`📊 Audio: ${Math.round(audioDuration)}s (${(audioDuration / 60).toFixed(1)} minutos)`);
 
-    // Limpiar archivo PCM temporal
-    try {
-      unlinkSync(pcmPath);
-    } catch (err) {
-      console.error('Error al eliminar PCM temporal:', err);
-    }
-    const totalChunks = Math.ceil(audioDuration / 20);
+    const MAX_DURATION_SECONDS = 3600; // 1 hora
+    let fullTranscription = '';
 
-    console.log(`📊 Audio: ${Math.round(audioDuration)}s (${totalChunks} chunks)`);
-    console.log(`🔵 Transcribiendo audio...`);
+    if (audioDuration > MAX_DURATION_SECONDS) {
+      // Audio largo - dividir y procesar por segmentos
+      const SEGMENT_DURATION = 1800; // 30 minutos
+      const totalSegments = Math.ceil(audioDuration / SEGMENT_DURATION);
+      console.log(`⚠️ Audio largo: ${Math.round(audioDuration)}s. Procesando en ${totalSegments} segmentos`);
 
-    const model = await getTranscriber();
+      const model = await getTranscriber();
 
-    let chunksProcessed = 0;
-    const result = await model(float32Audio, {
-      chunk_length_s: 30,
-      stride_length_s: 5,
-      return_timestamps: false,
-      task: 'transcribe',
-      sampling_rate: 16000,
-      chunk_callback: (_chunk: any) => {
-        chunksProcessed++;
-        const percent = Math.round((chunksProcessed / totalChunks) * 100);
-        console.log(`⏳ Transcribiendo: ${percent}% (chunk ${chunksProcessed}/${totalChunks})`);
+      for (let i = 0; i < totalSegments; i++) {
+        console.log(`🔵 Segmento ${i + 1}/${totalSegments}`);
+
+        const segmentPcmPath = join(process.cwd(), `segment-${timestamp}-${i}.pcm`);
+        execSync(`ffmpeg -f f32le -ar 16000 -ac 1 -i "${pcmPath}" -ss ${i * SEGMENT_DURATION} -t ${SEGMENT_DURATION} -f f32le "${segmentPcmPath}" -y`, {
+          stdio: 'pipe'
+        });
+
+        const segmentBuffer = readFileSync(segmentPcmPath);
+        const segmentAudio = new Float32Array(segmentBuffer.buffer, segmentBuffer.byteOffset, segmentBuffer.length / 4);
+
+        const segmentResult = await model(segmentAudio, {
+          chunk_length_s: 30,
+          stride_length_s: 5,
+          return_timestamps: false,
+          task: 'transcribe',
+          sampling_rate: 16000
+        });
+
+        fullTranscription += segmentResult.text + ' ';
+
+        try {
+          unlinkSync(segmentPcmPath);
+        } catch (err) {
+          console.error('Error al eliminar segmento:', err);
+        }
+
+        console.log(`✅ Segmento ${i + 1}/${totalSegments} completado`);
       }
-    });
+
+      try {
+        unlinkSync(pcmPath);
+      } catch (err) {
+        console.error('Error al eliminar PCM temporal:', err);
+      }
+
+    } else {
+      // Audio normal
+      const pcmBuffer = readFileSync(pcmPath);
+      const float32Audio = new Float32Array(pcmBuffer.buffer, pcmBuffer.byteOffset, pcmBuffer.length / 4);
+
+      try {
+        unlinkSync(pcmPath);
+      } catch (err) {
+        console.error('Error al eliminar PCM temporal:', err);
+      }
+
+      const totalChunks = Math.ceil(audioDuration / 20);
+      console.log(`📊 Audio: ${Math.round(audioDuration)}s (${totalChunks} chunks)`);
+      console.log(`🔵 Transcribiendo audio...`);
+
+      const model = await getTranscriber();
+
+      let chunksProcessed = 0;
+      const result = await model(float32Audio, {
+        chunk_length_s: 30,
+        stride_length_s: 5,
+        return_timestamps: false,
+        task: 'transcribe',
+        sampling_rate: 16000,
+        chunk_callback: (_chunk: any) => {
+          chunksProcessed++;
+          const percent = Math.round((chunksProcessed / totalChunks) * 100);
+          console.log(`⏳ Transcribiendo: ${percent}% (chunk ${chunksProcessed}/${totalChunks})`);
+        }
+      });
+
+      fullTranscription = result.text;
+    }
 
     console.log(`✅ Transcripción completa (100%)`);
-    console.log(`📏 Longitud del texto: ${result.text?.length || 0} caracteres`);
+    console.log(`📏 Longitud del texto: ${fullTranscription.length} caracteres`);
 
     try {
       unlinkSync(outputPath);
@@ -301,20 +429,20 @@ app.post('/api/transcribe', async (req: Request, res: Response) => {
     const txtPath = join(TRANSCRIPTIONS_DIR, `${filename}.txt`);
     const jsonPath = join(TRANSCRIPTIONS_DIR, `${filename}.json`);
 
-    writeFileSync(txtPath, result.text, 'utf-8');
+    writeFileSync(txtPath, fullTranscription, 'utf-8');
     console.log(`💾 Guardado: ${txtPath}`);
 
     const jsonData = {
       url,
       timestamp: new Date().toISOString(),
-      text: result.text,
-      length: result.text?.length || 0
+      text: fullTranscription,
+      length: fullTranscription.length
     };
     writeFileSync(jsonPath, JSON.stringify(jsonData, null, 2), 'utf-8');
     console.log(`💾 Guardado: ${jsonPath}`);
 
     res.json({
-      text: result.text,
+      text: fullTranscription,
       success: true,
       files: {
         txt: txtPath,
