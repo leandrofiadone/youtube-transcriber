@@ -7,7 +7,7 @@ import { pipeline } from '@xenova/transformers';
 import { execSync } from 'child_process';
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 const TRANSCRIPTIONS_DIR = join(process.cwd(), 'transcriptions');
 
 // Crear carpeta de transcripciones si no existe
@@ -17,6 +17,15 @@ if (!existsSync(TRANSCRIPTIONS_DIR)) {
 
 app.use(cors());
 app.use(express.json());
+
+// Health check endpoint para UptimeRobot
+app.get('/health', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    model: transcriber ? 'loaded' : 'not loaded'
+  });
+});
 
 // Inicializar el modelo Whisper (se carga una sola vez)
 let transcriber: any = null;
