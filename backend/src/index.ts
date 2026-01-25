@@ -89,9 +89,12 @@ app.get('/api/transcribe-stream', async (req: Request, res: Response) => {
       noWarnings: true,
       preferFreeFormats: true,
       postprocessorArgs: 'ffmpeg:-ar 16000 -ac 1',
+      // Opciones para evitar detección de bot
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      format: 'bestaudio/best',
       addHeader: [
         'referer:youtube.com',
-        'user-agent:Mozilla/5.0'
+        'accept-language:en-US,en;q=0.9'
       ]
     });
 
@@ -313,9 +316,12 @@ app.post('/api/transcribe', async (req: Request, res: Response) => {
       noWarnings: true,
       preferFreeFormats: true,
       postprocessorArgs: 'ffmpeg:-ar 16000 -ac 1',
+      // Opciones para evitar detección de bot
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      format: 'bestaudio/best',
       addHeader: [
         'referer:youtube.com',
-        'user-agent:Mozilla/5.0'
+        'accept-language:en-US,en;q=0.9'
       ]
     });
 
