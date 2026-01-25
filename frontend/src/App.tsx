@@ -15,6 +15,8 @@ interface StageStatus {
   transcribe: boolean
 }
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+
 function App() {
   const [url, setUrl] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -41,7 +43,7 @@ function App() {
 
     try {
       const eventSource = new EventSource(
-        `http://localhost:3001/api/transcribe-stream?url=${encodeURIComponent(url)}`
+        `${API_URL}/api/transcribe-stream?url=${encodeURIComponent(url)}`
       )
 
       eventSource.onmessage = (event) => {
@@ -82,7 +84,7 @@ function App() {
       }
 
       eventSource.onerror = () => {
-        setProgressMessage('Error de conexión')
+        setCurrentStage('Error de conexión')
         eventSource.close()
         setIsLoading(false)
       }
